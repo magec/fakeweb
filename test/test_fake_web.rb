@@ -21,7 +21,7 @@ class TestFakeWeb < Test::Unit::TestCase
       FakeWeb.registered_uri?
     end
     assert_raises ArgumentError do
-      FakeWeb.registered_uri?(:get, "http://example.com", "/example")
+      FakeWeb.registered_uri?(:get, "http://example.com", "/example", "/example")
     end
   end
 
@@ -30,7 +30,7 @@ class TestFakeWeb < Test::Unit::TestCase
       FakeWeb.response_for
     end
     assert_raises ArgumentError do
-      FakeWeb.response_for(:get, "http://example.com", "/example")
+      FakeWeb.response_for(:get, "http://example.com", "/example", "example")
     end
   end
 
@@ -383,10 +383,11 @@ class TestFakeWeb < Test::Unit::TestCase
   end
 
   def test_mock_post_that_raises_exception
-    FakeWeb.register_uri(:post, 'http://mock/raising_exception.txt', :exception => StandardError)
+    request_body = 'some data'
+    FakeWeb.register_uri(:post, 'http://mock/raising_exception.txt', :exception => StandardError,:request_body => request_body)
     assert_raises(StandardError) do
       Net::HTTP.start('mock') do |query|
-        query.post('/raising_exception.txt', 'some data')
+        query.post('/raising_exception.txt', request_body)
       end
     end
   end

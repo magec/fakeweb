@@ -2,7 +2,7 @@ module FakeWeb
   class Responder #:nodoc:
 
     attr_accessor :method, :uri, :options, :times
-    KNOWN_OPTIONS = [:body, :exception, :response, :status].freeze
+    KNOWN_OPTIONS = [:body, :exception, :response, :status, :request_body].freeze
 
     def initialize(method, uri, options, times)
       self.method = method

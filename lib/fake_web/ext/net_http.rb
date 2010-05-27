@@ -38,10 +38,11 @@ module Net  #:nodoc: all
     def request_with_fakeweb(request, body = nil, &block)
       uri = FakeWeb::Utility.request_uri_as_string(self, request)
       method = request.method.downcase.to_sym
+      request_body = body || ""
 
-      if FakeWeb.registered_uri?(method, uri)
-        @socket = Net::HTTP.socket_type.new
-        FakeWeb.response_for(method, uri, &block)
+      if FakeWeb.registered_uri?(method, uri, request_body)
+        @socket = Net::HTTP.socket_type.new 
+        FakeWeb.response_for(method, uri, request_body, &block)
       elsif FakeWeb.allow_net_connect?
         connect_without_fakeweb
         request_without_fakeweb(request, body, &block)

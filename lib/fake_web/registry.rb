@@ -1,3 +1,5 @@
+require 'digest/md5'
+
 module FakeWeb
   class Registry #:nodoc:
     include Singleton
@@ -9,21 +11,25 @@ module FakeWeb
     end
 
     def clean_registry
-      self.uri_map = Hash.new { |hash, key| hash[key] = {} }
+      self.uri_map = Hash.new { |hash, key| hash[key] = Hash.new { |i_hash,i_key| i_hash[i_key] = {}} }
     end
 
     def register_uri(method, uri, options)
-      uri_map[normalize_uri(uri)][method] = [*[options]].flatten.collect do |option|
+      request_body = ( options.is_a?(Hash) && options[:request_body] ) ? Digest::MD5.hexdigest(options.delete(:request_body)) : ''
+
+      uri_map[normalize_uri(uri)][method][request_body] = [*[options]].flatten.collect do |option|
         FakeWeb::Responder.new(method, uri, option, option[:times])
       end
     end
 
-    def registered_uri?(method, uri)
-      !responders_for(method, uri).empty?
+    def registered_uri?(method, uri, request_body = "")
+      request_body = Digest::MD5.hexdigest(request_body) if request_body != ""      
+      !responders_for(method, uri, request_body).empty?
     end
 
-    def response_for(method, uri, &block)
-      responders = responders_for(method, uri)
+    def response_for(method, uri, request_body = "", &block)
+      request_body = Digest::MD5.hexdigest(request_body) if request_body != ""      
+      responders = responders_for(method, uri, request_body)
       return nil if responders.empty?
 
       next_responder = responders.last
@@ -41,35 +47,34 @@ module FakeWeb
 
     private
 
-    def responders_for(method, uri)
+    def responders_for(method, uri,request_body)
       uri = normalize_uri(uri)
-
-      uri_map_matches(method, uri, URI) ||
-      uri_map_matches(:any,   uri, URI) ||
-      uri_map_matches(method, uri, Regexp) ||
-      uri_map_matches(:any,   uri, Regexp) ||
+      uri_map_matches(method, uri, request_body, URI) ||
+      uri_map_matches(:any,   uri, request_body, URI) ||
+      uri_map_matches(method, uri, request_body, Regexp) ||
+      uri_map_matches(:any,   uri, request_body, Regexp) ||
       []
     end
 
-    def uri_map_matches(method, uri, type_to_check = URI)
+    def uri_map_matches(method, uri, request_body, type_to_check = URI)
       uris_to_check = variations_of_uri_as_strings(uri)
 
       matches = uri_map.select { |registered_uri, method_hash|
-        registered_uri.is_a?(type_to_check) && method_hash.has_key?(method)
+        registered_uri.is_a?(type_to_check) && method_hash.has_key?(method) && method_hash[method].has_key?(request_body)
       }.select { |registered_uri, method_hash|
         if type_to_check == URI
           uris_to_check.include?(registered_uri.to_s)
         elsif type_to_check == Regexp
           uris_to_check.any? { |u| u.match(registered_uri) }
-        end
+        end 
       }
 
       if matches.size > 1
         raise MultipleMatchingURIsError,
           "More than one registered URI matched this request: #{method.to_s.upcase} #{uri}"
       end
-
-      matches.map { |_, method_hash| method_hash[method] }.first
+      
+      matches.map { |_, method_hash| method_hash[method][request_body] }.first
     end
 
 
