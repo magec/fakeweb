@@ -33,8 +33,20 @@ module FakeWeb
   #
   # When <tt>FakeWeb.allow_net_connect = true</tt> (the default), requests to
   # URIs not stubbed with FakeWeb are passed through to Net::HTTP.
+  #
+  # If you assign a +String+, +URI+, or +Regexp+ object, unstubbed requests
+  # will be allowed if they match that value. This is useful when you want to
+  # allow access to a local server for integration testing, while still
+  # preventing your tests from using the internet.
   def self.allow_net_connect=(allowed)
-    @allow_net_connect = allowed
+    case allowed
+    when String, URI, Regexp
+      @allow_all_connections = false
+      Registry.instance.register_passthrough_uri(allowed)
+    else
+      @allow_all_connections = allowed
+      Registry.instance.remove_passthrough_uri
+    end
   end
 
   # Enable pass-through to Net::HTTP by default.
@@ -43,8 +55,17 @@ module FakeWeb
   # Returns +true+ if requests to URIs not registered with FakeWeb are passed
   # through to Net::HTTP for normal processing (the default). Returns +false+
   # if an exception is raised for these requests.
-  def self.allow_net_connect?
-    @allow_net_connect
+  #
+  # If you've assigned a +String+, +URI+, or +Regexp+ to
+  # <tt>FakeWeb.allow_net_connect=</tt>, you must supply a URI to check
+  # against that filter. Otherwise, an ArgumentError will be raised.
+  def self.allow_net_connect?(uri = nil)
+    if Registry.instance.passthrough_uri_map.any?
+      raise ArgumentError, "You must supply a URI to test" if uri.nil?
+      Registry.instance.passthrough_uri_matches?(uri)
+    else
+      @allow_all_connections
+    end
   end
 
   # This exception is raised if you set <tt>FakeWeb.allow_net_connect =
@@ -74,7 +95,7 @@ module FakeWeb
   #   as the body of the response instead. (This used to be two options,
   #   <tt>:string</tt> and <tt>:file</tt>, respectively. These are now deprecated.)
   # <tt>:response</tt>:: 
-  #   Either an <tt>Net::HTTPResponse</tt>, an +IO+, or a +String+ which is used
+  #   Either a <tt>Net::HTTPResponse</tt>, an +IO+, or a +String+ which is used
   #   as the full response for the request.
   # 
   #   The easier way by far is to pass the <tt>:response</tt> option to
@@ -85,41 +106,47 @@ module FakeWeb
   # 
   #   To obtain a complete response document, you can use the +curl+ command,
   #   like so:
-  #  
-  #     curl -i http://www.example.com/ > response_for_www.example.com
+  #   
+  #     curl -i http://example.com > response_from_example.com
   #
   #   which can then be used in your test environment like so:
   #
-  #     FakeWeb.register_uri(:get, 'http://www.example.com/', :response => 'response_for_www.example.com')
+  #     FakeWeb.register_uri(:get, "http://example.com", :response => "response_from_example.com")
   #
   #   See the <tt>Net::HTTPResponse</tt>
   #   documentation[http://ruby-doc.org/stdlib/libdoc/net/http/rdoc/classes/Net/HTTPResponse.html]
   #   for more information on creating custom response objects.
   # 
   # +options+ may also be an +Array+ containing a list of the above-described
-  # +Hash+. In this case, FakeWeb will rotate through each provided response,
-  # you may optionally provide:
+  # +Hash+. In this case, FakeWeb will rotate through each response. You can
+  # optionally repeat a response more than once before rotating:
   #
   # <tt>:times</tt>::
-  #   The number of times this response will be used. Decremented by one each time it's called.
-  #   FakeWeb will use the final provided request indefinitely, regardless of its :times parameter.
-  # 
+  #   The number of times this response will be used before moving on to the
+  #   next one. The last response will be repeated indefinitely, regardless of
+  #   its <tt>:times</tt> parameter.
+  #
   # Two optional arguments are also accepted:
   #
   # <tt>:status</tt>::
   #   Passing <tt>:status</tt> as a two-value array will set the response code
   #   and message. The defaults are <tt>200</tt> and <tt>OK</tt>, respectively.
   #   Example:
-  #     FakeWeb.register_uri("http://www.example.com/", :body => "Go away!", :status => [404, "Not Found"])
+  #     FakeWeb.register_uri(:get, "http://example.com", :body => "Go away!", :status => [404, "Not Found"])
   # <tt>:exception</tt>::
   #   The argument passed via <tt>:exception</tt> will be raised when the
   #   specified URL is requested. Any +Exception+ class is valid. Example:
-  #     FakeWeb.register_uri('http://www.example.com/', :exception => Net::HTTPError)
+  #     FakeWeb.register_uri(:get, "http://example.com", :exception => Net::HTTPError)
   #
   # If you're using the <tt>:body</tt> response type, you can pass additional
   # options to specify the HTTP headers to be used in the response. Example:
   #
   #   FakeWeb.register_uri(:get, "http://example.com/index.txt", :body => "Hello", :content_type => "text/plain")
+  #
+  # You can also pass an array of header values to include a header in the
+  # response more than once:
+  #
+  #   FakeWeb.register_uri(:get, "http://example.com", :set_cookie => ["name=value", "example=1"])
   def self.register_uri(*args)
     case args.length
     when 3
@@ -152,7 +179,7 @@ module FakeWeb
   #   FakeWeb.registered_uri?(method, uri)
   #
   # Returns true if a +method+ request for +uri+ is registered with FakeWeb.
-  # Specify a method of <tt>:any</tt> to check for against all HTTP methods.
+  # Specify a method of <tt>:any</tt> to check against all HTTP methods.
   def self.registered_uri?(*args)
     case args.length
     when 2..3
@@ -163,6 +190,15 @@ module FakeWeb
     else
       raise ArgumentError.new("wrong number of arguments (#{args.length} for 2)")
     end
+  end
+
+  # Returns the request object from the last request made via Net::HTTP.
+  def self.last_request
+    @last_request
+  end
+
+  def self.last_request=(request) #:nodoc:
+    @last_request = request
   end
 
   private

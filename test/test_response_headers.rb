@@ -1,7 +1,6 @@
 require 'test_helper'
 
 class TestResponseHeaders < Test::Unit::TestCase
-
   def test_content_type_when_registering_with_string_and_content_type_header_as_symbol_option
     FakeWeb.register_uri(:get, "http://example.com/users.json", :body => '[{"username": "chrisk"}]', :content_type => "application/json")
     response = Net::HTTP.start("example.com") { |query| query.get("/users.json") }
@@ -28,6 +27,13 @@ class TestResponseHeaders < Test::Unit::TestCase
     response = Net::HTTP.start("example.com") { |query| query.get("/") }
     assert_equal "test example content", response.body
     assert_equal "user_id=1; example=yes", response['Set-Cookie']
+  end
+
+  def test_multiple_set_cookie_headers
+    FakeWeb.register_uri(:get, "http://example.com", :set_cookie => ["user_id=1", "example=yes"])
+    response = Net::HTTP.start("example.com") { |query| query.get("/") }
+    assert_equal ["user_id=1", "example=yes"], response.get_fields('Set-Cookie')
+    assert_equal "user_id=1, example=yes", response['Set-Cookie']
   end
 
   def test_registering_with_baked_response_ignores_header_options

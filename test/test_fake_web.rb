@@ -276,6 +276,37 @@ class TestFakeWeb < Test::Unit::TestCase
     assert_equal 'foo', response.body
   end
 
+  def test_mock_post_with_body_sets_the_request_body
+    FakeWeb.register_uri(:post, "http://example.com/posts", :status => [201, "Created"],:request_body => "title=Test")
+    http = Net::HTTP.new("example.com")
+    request = Net::HTTP::Post.new("/posts")
+    http.request(request, "title=Test")
+    assert_equal "title=Test", request.body
+    assert_equal 10, request.content_length
+  end
+
+  def test_mock_post_with_body_using_other_syntax_sets_the_request_body
+    FakeWeb.register_uri(:post, "http://example.com/posts", :status => [201, "Created"])
+    http = Net::HTTP.new("example.com")
+    request = Net::HTTP::Post.new("/posts")
+    request.body = "title=Test"
+    http.request(request)
+    assert_equal "title=Test", request.body
+    assert_equal 10, request.content_length
+  end
+
+  def test_real_post_with_body_sets_the_request_body
+    FakeWeb.allow_net_connect = true
+    setup_expectations_for_real_apple_hot_news_request :method => "POST",
+      :path => "/posts", :request_body => "title=Test"
+    http = Net::HTTP.new("images.apple.com")
+    request = Net::HTTP::Post.new("/posts")
+    request["Content-Type"] = "application/x-www-form-urlencoded"
+    http.request(request, "title=Test")
+    assert_equal "title=Test", request.body
+    assert_equal 10, request.content_length
+  end
+
   def test_mock_get_with_request_as_registered_uri
     fake_response = Net::HTTPOK.new('1.1', '200', 'OK')
     FakeWeb.register_uri(:get, 'http://mock/test_response', :response => fake_response)
@@ -321,6 +352,12 @@ class TestFakeWeb < Test::Unit::TestCase
     assert_raises StandardError do
       Net::HTTP.start('mock') { |q| q.get('/unimplemented') }
     end
+  end
+
+  def test_specifying_nil_for_body
+    FakeWeb.register_uri(:head, "http://example.com", :body => nil)
+    response = Net::HTTP.start("example.com") { |query| query.head("/") }
+    assert_equal "", response.body
   end
 
   def test_real_http_request

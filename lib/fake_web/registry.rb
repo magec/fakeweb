@@ -4,7 +4,7 @@ module FakeWeb
   class Registry #:nodoc:
     include Singleton
 
-    attr_accessor :uri_map
+    attr_accessor :uri_map, :passthrough_uri_map
 
     def initialize
       clean_registry
@@ -44,22 +44,34 @@ module FakeWeb
       next_responder.response(&block)
     end
 
+    def register_passthrough_uri(uri)
+      self.passthrough_uri_map = {normalize_uri(uri) => {:any => {"" => true}}}
+    end
+
+    def remove_passthrough_uri
+      self.passthrough_uri_map = {}
+    end
+
+    def passthrough_uri_matches?(uri)
+      uri = normalize_uri(uri)
+      uri_map_matches(passthrough_uri_map, :any, uri, "", URI) ||
+      uri_map_matches(passthrough_uri_map, :any, uri, "", Regexp)
+    end
 
     private
 
     def responders_for(method, uri,request_body)
       uri = normalize_uri(uri)
-      uri_map_matches(method, uri, request_body, URI) ||
-      uri_map_matches(:any,   uri, request_body, URI) ||
-      uri_map_matches(method, uri, request_body, Regexp) ||
-      uri_map_matches(:any,   uri, request_body, Regexp) ||
+      uri_map_matches(uri_map, method, uri, request_body, URI) ||
+      uri_map_matches(uri_map, :any,   uri, request_body, URI) ||
+      uri_map_matches(uri_map, method, uri, request_body, Regexp) ||
+      uri_map_matches(uri_map, :any,   uri, request_body, Regexp) ||
       []
     end
 
-    def uri_map_matches(method, uri, request_body, type_to_check = URI)
+    def uri_map_matches(map,method, uri, request_body, type_to_check = URI)
       uris_to_check = variations_of_uri_as_strings(uri)
-
-      matches = uri_map.select { |registered_uri, method_hash|
+      matches = map.select { |registered_uri, method_hash|
         registered_uri.is_a?(type_to_check) && method_hash.has_key?(method) && method_hash[method].has_key?(request_body)
       }.select { |registered_uri, method_hash|
         if type_to_check == URI

@@ -36,14 +36,17 @@ module Net  #:nodoc: all
     end
 
     def request_with_fakeweb(request, body = nil, &block)
+      FakeWeb.last_request = request
+
       uri = FakeWeb::Utility.request_uri_as_string(self, request)
       method = request.method.downcase.to_sym
       request_body = body || ""
 
       if FakeWeb.registered_uri?(method, uri, request_body)
         @socket = Net::HTTP.socket_type.new 
+        FakeWeb::Utility.produce_side_effects_of_net_http_request(request, body)
         FakeWeb.response_for(method, uri, request_body, &block)
-      elsif FakeWeb.allow_net_connect?
+      elsif FakeWeb.allow_net_connect?(uri)
         connect_without_fakeweb
         request_without_fakeweb(request, body, &block)
       else
