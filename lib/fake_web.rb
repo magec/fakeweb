@@ -149,7 +149,7 @@ module FakeWeb
   #   FakeWeb.register_uri(:get, "http://example.com", :set_cookie => ["name=value", "example=1"])
   def self.register_uri(*args)
     case args.length
-    when 3
+    when 3..4
       Registry.instance.register_uri(*args)
     when 2
       print_missing_http_method_deprecation_warning(*args)

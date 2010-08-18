@@ -14,8 +14,8 @@ module FakeWeb
       self.uri_map = Hash.new { |hash, key| hash[key] = Hash.new { |i_hash,i_key| i_hash[i_key] = {}} }
     end
 
-    def register_uri(method, uri, options)
-      request_body = ( options.is_a?(Hash) && options[:request_body] ) ? Digest::MD5.hexdigest(options.delete(:request_body)) : ''
+    def register_uri(method, uri, request_body = nil, options)
+      request_body = request_body ? Digest::MD5.hexdigest(request_body) : ''
 
       uri_map[normalize_uri(uri)][method][request_body] = [*[options]].flatten.collect do |option|
         FakeWeb::Responder.new(method, uri, option, option[:times])
@@ -29,6 +29,7 @@ module FakeWeb
 
     def response_for(method, uri, request_body = "", &block)
       request_body = Digest::MD5.hexdigest(request_body) if request_body != ""      
+
       responders = responders_for(method, uri, request_body)
       return nil if responders.empty?
 
