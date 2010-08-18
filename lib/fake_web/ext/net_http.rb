@@ -40,7 +40,7 @@ module Net  #:nodoc: all
 
       uri = FakeWeb::Utility.request_uri_as_string(self, request)
       method = request.method.downcase.to_sym
-      request_body = body || ""
+      request_body = request.body ? request.body :  body || ""
 
       if FakeWeb.registered_uri?(method, uri, request_body)
         @socket = Net::HTTP.socket_type.new 

@@ -286,7 +286,7 @@ class TestFakeWeb < Test::Unit::TestCase
   end
 
   def test_mock_post_with_body_using_other_syntax_sets_the_request_body
-    FakeWeb.register_uri(:post, "http://example.com/posts", :status => [201, "Created"])
+    FakeWeb.register_uri(:post, "http://example.com/posts", :status => [201, "Created"],:request_body => "title=Test")
     http = Net::HTTP.new("example.com")
     request = Net::HTTP::Post.new("/posts")
     request.body = "title=Test"
