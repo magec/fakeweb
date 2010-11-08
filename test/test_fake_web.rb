@@ -277,7 +277,7 @@ class TestFakeWeb < Test::Unit::TestCase
   end
 
   def test_mock_post_with_body_sets_the_request_body
-    FakeWeb.register_uri(:post, "http://example.com/posts", "title=Test", :status => [201, "Created"])
+    FakeWeb.register_uri(:post, "http://example.com/posts", Proc.new {|i| "title=Test"}, :status => [201, "Created"])
     http = Net::HTTP.new("example.com")
     request = Net::HTTP::Post.new("/posts")
     http.request(request, "title=Test")
@@ -286,7 +286,7 @@ class TestFakeWeb < Test::Unit::TestCase
   end
 
   def test_mock_post_with_body_using_other_syntax_sets_the_request_body
-    FakeWeb.register_uri(:post, "http://example.com/posts", "title=Test", :status => [201, "Created"])
+    FakeWeb.register_uri(:post, "http://example.com/posts", Proc.new {|i| i == "title=Test"}, :status => [201, "Created"])
     http = Net::HTTP.new("example.com")
     request = Net::HTTP::Post.new("/posts")
     request.body = "title=Test"
@@ -421,7 +421,7 @@ class TestFakeWeb < Test::Unit::TestCase
 
   def test_mock_post_that_raises_exception
     request_body = 'some data'
-    FakeWeb.register_uri(:post, 'http://mock/raising_exception.txt', request_body, :exception => StandardError)
+    FakeWeb.register_uri(:post, 'http://mock/raising_exception.txt', Proc.new{|i| i == request_body}, :exception => StandardError)
     assert_raises(StandardError) do
       Net::HTTP.start('mock') do |query|
         query.post('/raising_exception.txt', request_body)

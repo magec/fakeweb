@@ -18,7 +18,7 @@ class TestLastRequest < Test::Unit::TestCase
   end
 
   def test_last_request_has_correct_method_path_and_body_for_post
-    FakeWeb.register_uri(:post, "http://example.com/posts", "title=Test", :status => [201, "Created"] )
+    FakeWeb.register_uri(:post, "http://example.com/posts", Proc.new{|a| a=="title=Test"}, :status => [201, "Created"] )
     Net::HTTP.start("example.com") { |http| http.post("/posts", "title=Test") }
     assert_equal "POST", FakeWeb.last_request.method
     assert_equal "/posts", FakeWeb.last_request.path
