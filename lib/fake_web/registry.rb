@@ -1,6 +1,9 @@
-require 'digest/md5'
-
 module FakeWeb
+
+  module RequestMatcher
+    ALWAYS_MATCH = Proc.new { |request|  true }
+  end
+
   class Registry #:nodoc:
     include Singleton
 
@@ -14,21 +17,23 @@ module FakeWeb
       self.uri_map = Hash.new { |hash, key| hash[key] = Hash.new { |i_hash,i_key| i_hash[i_key] = {}} }
     end
 
-    def register_uri(method, uri, request_body = nil, options)
-      request_body = request_body ? Digest::MD5.hexdigest(request_body) : ''
-
-      uri_map[normalize_uri(uri)][method][request_body] = [*[options]].flatten.collect do |option|
+    def register_uri(method, uri, request_matcher = ::RequestMatcher::ALWAYS_MATCH,options = {} )
+      unless request_matcher.respond_to?(:call)
+        # This is a special case, we have to detect in ruby 1.8 whether request_body is a hash, in that case it was not passed
+        options = request_matcher
+        request_matcher = FakeWeb::RequestMatcher::ALWAYS_MATCH
+      end 
+      
+      uri_map[normalize_uri(uri)][method][request_matcher] = [*[options]].flatten.collect do |option|
         FakeWeb::Responder.new(method, uri, option, option[:times])
       end
     end
 
-    def registered_uri?(method, uri, request_body = "")
-      request_body = Digest::MD5.hexdigest(request_body) if request_body != ""      
+    def registered_uri?(method, uri, request_body = FakeWeb::RequestMatcher::ALWAYS_MATCH)
       !responders_for(method, uri, request_body).empty?
     end
 
-    def response_for(method, uri, request_body = "", &block)
-      request_body = Digest::MD5.hexdigest(request_body) if request_body != ""      
+    def response_for(method, uri, request_body = FakeWeb::RequestMatcher::ALWAYS_MATCH, &block)
 
       responders = responders_for(method, uri, request_body)
       return nil if responders.empty?
@@ -46,7 +51,7 @@ module FakeWeb
     end
 
     def register_passthrough_uri(uri)
-      self.passthrough_uri_map = {normalize_uri(uri) => {:any => {"" => true}}}
+      self.passthrough_uri_map = {normalize_uri(uri) => {:any => {FakeWeb::RequestMatcher::ALWAYS_MATCH => [true]}}}
     end
 
     def remove_passthrough_uri
@@ -73,7 +78,7 @@ module FakeWeb
     def uri_map_matches(map,method, uri, request_body, type_to_check = URI)
       uris_to_check = variations_of_uri_as_strings(uri)
       matches = map.select { |registered_uri, method_hash|
-        registered_uri.is_a?(type_to_check) && method_hash.has_key?(method) && method_hash[method].has_key?(request_body)
+        registered_uri.is_a?(type_to_check) && method_hash.has_key?(method) && method_hash[method].keys.any? { |i|  i.call(request_body) }
       }.select { |registered_uri, method_hash|
         if type_to_check == URI
           uris_to_check.include?(registered_uri.to_s)
@@ -87,7 +92,12 @@ module FakeWeb
           "More than one registered URI matched this request: #{method.to_s.upcase} #{uri}"
       end
       
-      matches.map { |_, method_hash| method_hash[method][request_body] }.first
+      matches.map do |_, method_hash| 
+        method_hash[method].map do |k,v|
+          v if k.call(request_body)
+        end.flatten
+      end.first
+
     end
 
 
